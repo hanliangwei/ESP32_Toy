@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 蓝牙配网</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 400px; margin: auto; }
+    input { width: 100%; padding: 10px; margin: 10px 0; box-sizing: border-box; }
+    button { width: 100%; padding: 15px; background: #007bff; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+    button:active { background: #0056b3; }
+    #status { margin-top: 20px; color: #555; }
+  </style>
+</head>
+<body>
+
+  <h2>ESP32 蓝牙配网</h2>
+  
+  <input type="text" id="ssid" placeholder="请输入 WiFi 名称 (SSID)">
+  <input type="text" id="password" placeholder="请输入 WiFi 密码">
+  <button onclick="connectAndSend()">连接蓝牙并发送</button>
+
+  <div id="status">状态: 准备就绪</div>
+
+  <script>
+    // 必须和 Arduino 代码中的 UUID 保持完全一致 (小写)
+    const SERVICE_UUID = '19b10000-e8f2-537e-4f6c-d104768a1214';
+    const CHARACTERISTIC_UUID = '19b10001-e8f2-537e-4f6c-d104768a1214';
+
+    async function connectAndSend() {
+      const ssid = document.getElementById('ssid').value;
+      const password = document.getElementById('password').value;
+      const statusDiv = document.getElementById('status');
+
+      if (!ssid) {
+        alert("请输入 WiFi 名称！");
+        return;
+      }
+
+      try {
+        statusDiv.innerText = "状态: 正在扫描蓝牙设备...";
+        // 请求蓝牙设备，过滤出包含我们指定 Service 的设备
+        const device = await navigator.bluetooth.requestDevice({
+          filters: [{ name: 'ESP32-配网' }],
+          optionalServices: [SERVICE_UUID]
+        });
+
+        statusDiv.innerText = "状态: 正在连接 " + device.name + "...";
+        const server = await device.gatt.connect();
+
+        statusDiv.innerText = "状态: 获取服务中...";
+        const service = await server.getPrimaryService(SERVICE_UUID);
+
+        statusDiv.innerText = "状态: 获取特征值中...";
+        const characteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+        // 拼接字符串并转换为 Uint8Array
+        const dataString = ssid + "|" + password;
+        const encoder = new TextEncoder();
+        const data = encoder.encode(dataString);
+
+        statusDiv.innerText = "状态: 正在发送 WiFi 信息...";
+        await characteristic.writeValue(data);
+
+        statusDiv.innerText = "状态: 发送成功！ESP32 正在重启连接 WiFi。";
+        
+        // 发送完断开蓝牙连接
+        server.disconnect();
+
+      } catch (error) {
+        console.error("出错了:", error);
+        statusDiv.innerText = "状态: 发生错误 (" + error.message + ")";
+      }
+    }
+  </script>
+</body>
+</html>

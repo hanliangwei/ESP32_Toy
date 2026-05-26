@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 智能灯控</title>
+    <!-- 引入 MQTT.js 库 -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: #1e1e1e;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            text-align: center;
+            width: 300px;
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 24px;
+            color: #4CAF50;
+        }
+        .status {
+            font-size: 18px;
+            margin: 20px 0;
+            color: #aaaaaa;
+        }
+        .status span {
+            font-weight: bold;
+            color: #ff9800; /* 默认未连接颜色 */
+        }
+        /* 灯泡图标样式 */
+        .bulb {
+            width: 100px;
+            height: 100px;
+            background-color: #333;
+            border-radius: 50%;
+            margin: 0 auto 30px;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+            transition: all 0.3s ease;
+        }
+        .bulb.on {
+            background-color: #ffeb3b;
+            box-shadow: 0 0 50px #ffeb3b, inset 0 0 20px #fff;
+        }
+        /* 切换按钮样式 */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 80px;
+            height: 40px;
+        }
+        .switch input { 
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #555;
+            transition: .4s;
+            border-radius: 40px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 32px;
+            width: 32px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #4CAF50;
+        }
+        input:checked + .slider:before {
+            transform: translateX(40px);
+        }
+        input:disabled + .slider {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .log {
+            margin-top: 30px;
+            font-size: 12px;
+            color: #888;
+            height: 60px;
+            overflow-y: auto;
+            text-align: left;
+            background: #111;
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>智能灯光控制</h1>
+    <div class="status">MQTT状态: <span id="mqttStatus">连接中...</span></div>
+    
+    <div class="bulb" id="lightBulb"></div>
+    
+    <div>
+        <label class="switch">
+            <input type="checkbox" id="lightSwitch" disabled>
+            <span class="slider"></span>
+        </label>
+    </div>
+
+    <div class="log" id="logBox">
+        <div>等待连接...</div>
+    </div>
+</div>
+
+<script>
+    // 配置 MQTT Broker (使用WebSocket协议)
+    // 注意: Web端必须使用 ws:// 或 wss:// 协议，不能用 tcp://
+    const brokerUrl = 'wss://broker.emqx.io:8084/mqtt';
+    const topicCmd = 'myhome/esp32/light/cmd';
+    const topicState = 'myhome/esp32/light/state';
+    
+    // 生成随机的客户端ID
+    const clientId = 'web_client_' + Math.random().toString(16).substr(2, 8);
+    
+    const mqttStatus = document.getElementById('mqttStatus');
+    const lightBulb = document.getElementById('lightBulb');
+    const lightSwitch = document.getElementById('lightSwitch');
+    const logBox = document.getElementById('logBox');
+
+    function log(msg) {
+        const div = document.createElement('div');
+        const time = new Date().toLocaleTimeString();
+        div.textContent = `[${time}] ${msg}`;
+        logBox.appendChild(div);
+        logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    log(`正在连接到 ${brokerUrl}...`);
+    
+    // 连接到 MQTT Broker
+    const client = mqtt.connect(brokerUrl, {
+        clientId: clientId,
+        clean: true,
+        connectTimeout: 4000,
+        reconnectPeriod: 1000,
+    });
+
+    client.on('connect', () => {
+        mqttStatus.textContent = '已连接';
+        mqttStatus.style.color = '#4CAF50';
+        lightSwitch.disabled = false;
+        log('MQTT连接成功!');
+        
+        // 订阅状态主题
+        client.subscribe(topicState, (err) => {
+            if (!err) {
+                log(`已订阅主题: ${topicState}`);
+            }
+        });
+    });
+
+    client.on('message', (topic, message) => {
+        const payload = message.toString();
+        log(`收到消息: ${payload} (来自 ${topic})`);
+        
+        if (topic === topicState) {
+            if (payload === 'ON') {
+                lightBulb.classList.add('on');
+                lightSwitch.checked = true;
+            } else if (payload === 'OFF') {
+                lightBulb.classList.remove('on');
+                lightSwitch.checked = false;
+            }
+        }
+    });
+
+    client.on('error', (err) => {
+        log(`MQTT错误: ${err.message}`);
+        mqttStatus.textContent = '连接错误';
+        mqttStatus.style.color = '#f44336';
+    });
+
+    client.on('offline', () => {
+        mqttStatus.textContent = '离线';
+        mqttStatus.style.color = '#ff9800';
+        lightSwitch.disabled = true;
+    });
+
+    // 监听开关点击事件发送命令
+    lightSwitch.addEventListener('change', (e) => {
+        const cmd = e.target.checked ? 'ON' : 'OFF';
+        log(`发送命令: ${cmd}`);
+        client.publish(topicCmd, cmd);
+        
+        // 注意：这里我们不立刻改变灯泡UI状态
+        // 而是等待ESP32处理完命令后，发布'state'消息回来，通过上面的on('message')来更新UI
+        // 这样可以确保网页上的状态和真实ESP32的状态绝对一致
+    });
+</script>
+
+</body>
+</html>
