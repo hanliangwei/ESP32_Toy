@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 Toy 智能控制中心</title>
+  <!-- 引入 Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-color: #080914;
+      --card-bg: rgba(18, 20, 38, 0.5);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-border-hover: rgba(100, 108, 255, 0.4);
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --primary: #6366f1;
+      --primary-glow: rgba(99, 102, 241, 0.15);
+      --success: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.15);
+      --amber: #f59e0b;
+      --amber-glow: rgba(245, 158, 11, 0.15);
+      --cyan: #06b6d4;
+      --cyan-glow: rgba(6, 182, 212, 0.15);
+      --rose: #f43f5e;
+      --rose-glow: rgba(244, 63, 94, 0.15);
+      --purple: #a855f7;
+      --purple-glow: rgba(168, 85, 247, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* 背景炫光装饰 */
+    body::before {
+      content: "";
+      position: absolute;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(0,0,0,0) 70%);
+      top: -100px;
+      left: -100px;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    body::after {
+      content: "";
+      position: absolute;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(168, 85, 247, 0.12) 0%, rgba(0,0,0,0) 70%);
+      bottom: -150px;
+      right: -100px;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    /* 网格状极客感背景线 */
+    .grid-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: 
+        linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+      background-size: 40px 40px;
+      z-index: -2;
+      pointer-events: none;
+    }
+
+    .container {
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 60px 24px;
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 60px;
+      animation: fadeInDown 0.8s ease-out;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 16px;
+      border-radius: 100px;
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      color: #818cf8;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      font-size: 48px;
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #ffffff 30%, #a5b4fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      font-size: 18px;
+      color: var(--text-muted);
+      max-width: 600px;
+      margin: 0 auto;
+      line-height: 1.6;
+      font-weight: 300;
+    }
+
+    /* 快捷导航网格 */
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 30px;
+      animation: fadeInUp 0.8s ease-out 0.2s both;
+    }
+
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 35px 30px;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      overflow: hidden;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    /* 悬浮微动效与发光 */
+    .card:hover {
+      transform: translateY(-8px);
+      border-color: var(--hover-color);
+      box-shadow: 0 20px 40px -15px var(--glow-color), 
+                  0 0 0 1px var(--hover-color);
+    }
+
+    /* 卡片内部渐变半透明光晕 */
+    .card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: radial-gradient(800px circle at var(--x, 0px) var(--y, 0px), rgba(255,255,255,0.06), transparent 40%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+
+    .card:hover::before {
+      opacity: 1;
+    }
+
+    /* 卡片顶部的图标与标签区 */
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 25px;
+    }
+
+    .icon-wrapper {
+      width: 60px;
+      height: 60px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--glow-color);
+      color: var(--theme-color);
+      transition: all 0.3s ease;
+    }
+
+    .card:hover .icon-wrapper {
+      transform: scale(1.1) rotate(4deg);
+    }
+
+    .icon-wrapper svg {
+      width: 28px;
+      height: 28px;
+      fill: currentColor;
+    }
+
+    /* 状态小标签 */
+    .status-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 100px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .status-active {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      color: #34d399;
+    }
+
+    .status-pending {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+    }
+
+    /* 卡片文本区 */
+    .card-body h3 {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+
+    .card-body p {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 30px;
+      font-weight: 300;
+    }
+
+    /* 卡片下方的极简按钮 */
+    .card-footer {
+      display: flex;
+      align-items: center;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--theme-color);
+      transition: color 0.3s ease;
+    }
+
+    .card-footer span {
+      margin-right: 8px;
+    }
+
+    .card-footer svg {
+      width: 16px;
+      height: 16px;
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      fill: currentColor;
+    }
+
+    .card:hover .card-footer svg {
+      transform: translateX(6px);
+    }
+
+    /* 版权底部信息 */
+    footer {
+      text-align: center;
+      padding: 40px 24px;
+      color: #4b5563;
+      font-size: 13px;
+      border-top: 1px solid rgba(255, 255, 255, 0.02);
+      margin-top: auto;
+      font-weight: 300;
+    }
+
+    /* 自定义各种色系参数 */
+    .theme-blue {
+      --theme-color: #818cf8;
+      --hover-color: var(--card-border-hover);
+      --glow-color: var(--primary-glow);
+    }
+    
+    .theme-green {
+      --theme-color: #34d399;
+      --hover-color: rgba(16, 185, 129, 0.4);
+      --glow-color: var(--success-glow);
+    }
+
+    .theme-amber {
+      --theme-color: #fbbf24;
+      --hover-color: rgba(245, 158, 11, 0.4);
+      --glow-color: var(--amber-glow);
+    }
+
+    .theme-cyan {
+      --theme-color: #22d3ee;
+      --hover-color: rgba(6, 182, 212, 0.4);
+      --glow-color: var(--cyan-glow);
+    }
+
+    .theme-rose {
+      --theme-color: #fb7185;
+      --hover-color: rgba(244, 63, 94, 0.4);
+      --glow-color: var(--rose-glow);
+    }
+
+    .theme-purple {
+      --theme-color: #c084fc;
+      --hover-color: rgba(168, 85, 247, 0.4);
+      --glow-color: var(--purple-glow);
+    }
+
+    /* 动画定义 */
+    @keyframes fadeInDown {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* 响应式调整 */
+    @media (max-width: 768px) {
+      h1 {
+        font-size: 36px;
+      }
+      .container {
+        padding: 40px 16px;
+      }
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="grid-overlay"></div>
+
+  <div class="container">
+    <header>
+      <div class="badge">ESP32 Portal Panel</div>
+      <h1>ESP32 Toy 智能控制中心</h1>
+      <p class="subtitle">通过精美的 Web 交互界面无缝配置 ESP32 硬件参数，享受丝滑的跨端 IoT 物联网掌控体验。</p>
+    </header>
+
+    <main class="dashboard-grid">
+      <!-- 蓝牙配网 -->
+      <a href="ble_config_wifi.html" class="card theme-blue">
+        <div class="card-header">
+          <div class="icon-wrapper">
+            <!-- Bluetooth + Wifi Icon SVG -->
+            <svg viewBox="0 0 24 24">
+              <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M7.5,13A1.5,1.5 0 0,1 6,11.5A1.5,1.5 0 0,1 7.5,10A1.5,1.5 0 0,1 9,11.5A1.5,1.5 0 0,1 7.5,13M12,19.5A7.5,7.5 0 0,1 4.5,12A7.5,7.5 0 0,1 12,4.5A7.5,7.5 0 0,1 19.5,12A7.5,7.5 0 0,1 12,19.5M10.8,12H13.2L15.6,14.4L13.2,16.8H10.8V12M13.2,7.2L15.6,9.6L13.2,12H10.8V7.2H13.2M12,5.2L7.2,10H10.8V5.2H12M12,18.8L7.2,14H10.8V18.8H12Z"/>
+            </svg>
+          </div>
+          <span class="status-badge status-active">可连接</span>
+        </div>
+        <div class="card-body">
+          <h3>蓝牙配网</h3>
+          <p class="subtitle" style="font-size: 14px; margin-bottom: 0;">使用 Web Bluetooth API 直接与 ESP32 建立底层无线连接，配置并传输目标 WiFi 凭据。</p>
+        </div>
+        <div class="card-footer" style="margin-top: 30px;">
+          <span>立即配置</span>
+          <svg viewBox="0 0 24 24"><path d="M4,11V13H16L10.5,18.5L11.92,19.92L19.84,12L11.92,4.08L10.5,5.5L16,11H4Z"/></svg>
+        </div>
+      </a>
+
+      <!-- 智能灯控 -->
+      <a href="web_control.html" class="card theme-green">
+        <div class="card-header">
+          <div class="icon-wrapper">
+            <!-- Light Bulb SVG -->
+            <svg viewBox="0 0 24 24">
+              <path d="M12,2A7,7 0 0,0 5,9C5,11.38 6.19,13.47 8,14.74V17A1,1 0 0,0 9,18H15A1,1 0 0,0 16,17V14.74C17.81,13.47 19,11.38 19,9A7,7 0 0,0 12,2M9,21A1,1 0 0,0 10,22H14A1,1 0 0,0 15,21V20H9V21M12,4A5,5 0 0,1 17,9C17,11.05 15.74,12.81 13.9,13.55L13,13.91V16H11V13.91L10.1,13.55C8.26,12.81 7,11.05 7,9A5,5 0 0,1 12,4Z"/>
+            </svg>
+          </div>
+          <span class="status-badge status-active">MQTT 联通</span>
+        </div>
+        <div class="card-body">
+          <h3>智能灯控</h3>
+          <p class="subtitle" style="font-size: 14px; margin-bottom: 0;">基于 WebSockets 连接 EMQX 消息代理服务器，远程双向发送与同步 ESP32 板载智能 LED 状态。</p>
+        </div>
+        <div class="card-footer" style="margin-top: 30px;">
+          <span>打开控制台</span>
+          <svg viewBox="0 0 24 24"><path d="M4,11V13H16L10.5,18.5L11.92,19.92L19.84,12L11.92,4.08L10.5,5.5L16,11H4Z"/></svg>
+        </div>
+      </a>
+
+      <!-- 预留 1: 传感器监视 -->
+      <a href="ble_config_wifi.html" class="card theme-amber">
+        <div class="card-header">
+          <div class="icon-wrapper">
+            <!-- Chart SVG -->
+            <svg viewBox="0 0 24 24">
+              <path d="M19,3H5C3.89,3 3,3.89 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V5C21,3.89 20.1,3 19,3M19,19H5V5H19V19M7,10H9V17H7V10M11,7H13V17H11V7M15,13H17V17H15V13Z"/>
+            </svg>
+          </div>
+          <span class="status-badge status-pending">预留</span>
+        </div>
+        <div class="card-body">
+          <h3>环境监控</h3>
+          <p class="subtitle" style="font-size: 14px; margin-bottom: 0;">预留功能：用于实时采集和展示 ESP32 搭载的温湿度传感器 (DHT11/DHT22) 历史曲线。</p>
+        </div>
+        <div class="card-footer" style="margin-top: 30px;">
+          <span>待开发 (跳至配网)</span>
+          <svg viewBox="0 0 24 24"><path d="M4,11V13H16L10.5,18.5L11.92,19.92L19.84,12L11.92,4.08L10.5,5.5L16,11H4Z"/></svg>
+        </div>
+      </a>
+
+      <!-- 预留 2: 电机与舵机控制 -->
+      <a href="ble_config_wifi.html" class="card theme-cyan">
+        <div class="card-header">
+          <div class="icon-wrapper">
+            <!-- Controller SVG -->
+            <svg viewBox="0 0 24 24">
+              <path d="M21,6H3A2,2 0 0,0 1,8V16A2,2 0 0,0 3,18H21A2,2 0 0,0 23,16V8A2,2 0 0,0 21,6M6,15H5V13H3V11H5V9H6V11H8V13H6V15M15.5,12A1.5,1.5 0 1,1 17,10.5A1.5,1.5 0 0,1 15.5,12M18.5,15A1.5,1.5 0 1,1 20,13.5A1.5,1.5 0 0,1 18.5,15Z"/>
+            </svg>
+          </div>
+          <span class="status-badge status-pending">预留</span>
+        </div>
+        <div class="card-body">
+          <h3>舵机控制器</h3>
+          <p class="subtitle" style="font-size: 14px; margin-bottom: 0;">预留功能：基于摇杆或重力感应手势，实时操纵舵机旋转角度与直流电机驱动转速。</p>
+        </div>
+        <div class="card-footer" style="margin-top: 30px;">
+          <span>待开发 (跳至配网)</span>
+          <svg viewBox="0 0 24 24"><path d="M4,11V13H16L10.5,18.5L11.92,19.92L19.84,12L11.92,4.08L10.5,5.5L16,11H4Z"/></svg>
+        </div>
+      </a>
+
+      <!-- 预留 3: 摄像头图传 -->
+      <a href="ble_config_wifi.html" class="card theme-rose">
+        <div class="card-header">
+          <div class="icon-wrapper">
+            <!-- Camera SVG -->
+            <svg viewBox="0 0 24 24">
+              <path d="M4,4H7L9,2H15L17,4H20A2,2 0 0,1 22,6V18A2,2 0 0,1 20,20H4A2,2 0 0,1 2,18V6A2,2 0 0,1 4,4M12,7A5,5 0 1,0 17,12A5,5 0 0,0 12,7M12,9A3,3 0 1,1 9,12A3,3 0 0,1 12,9Z"/>
+            </svg>
+          </div>
+          <span class="status-badge status-pending">预留</span>
+        </div>
+        <div class="card-body">
+          <h3>视频图传</h3>
+          <p class="subtitle" style="font-size: 14px; margin-bottom: 0;">预留功能：适配 ESP32-CAM 模块的实时 MJPEG 视频流传输与端侧人脸识别展示。</p>
+        </div>
+        <div class="card-footer" style="margin-top: 30px;">
+          <span>待开发 (跳至配网)</span>
+          <svg viewBox="0 0 24 24"><path d="M4,11V13H16L10.5,18.5L11.92,19.92L19.84,12L11.92,4.08L10.5,5.5L16,11H4Z"/></svg>
+        </div>
+      </a>
+
+      <!-- 预留 4: 极客配置终端 -->
+      <a href="ble_config_wifi.html" class="card theme-purple">
+        <div class="card-header">
+          <div class="icon-wrapper">
+            <!-- Terminal SVG -->
+            <svg viewBox="0 0 24 24">
+              <path d="M20,19H4A2,2 0 0,1 2,17V7A2,2 0 0,1 4,5H20A2,2 0 0,1 22,7V17A2,2 0 0,1 20,19M4,7V17H20V7H4M6,9H8V11H6V9M10,9H18V11H10V9M6,13H14V15H6V13Z"/>
+            </svg>
+          </div>
+          <span class="status-badge status-pending">预留</span>
+        </div>
+        <div class="card-body">
+          <h3>高级控制台</h3>
+          <p class="subtitle" style="font-size: 14px; margin-bottom: 0;">预留功能：基于串口/WebREPL的高级交互终端，支持直接运行 MicroPython 脚本或调试指令。</p>
+        </div>
+        <div class="card-footer" style="margin-top: 30px;">
+          <span>待开发 (跳至配网)</span>
+          <svg viewBox="0 0 24 24"><path d="M4,11V13H16L10.5,18.5L11.92,19.92L19.84,12L11.92,4.08L10.5,5.5L16,11H4Z"/></svg>
+        </div>
+      </a>
+    </main>
+  </div>
+
+  <footer>
+    &copy; 2026 ESP32 Toy 开发者面板 - Designed with Passion
+  </footer>
+
+  <script>
+    // 增加交互的鼠标炫光感应动效 (卡片高亮位置跟随鼠标)
+    document.querySelectorAll('.card').forEach(card => {
+      card.addEventListener('mousemove', e => {
+        const rect = card.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        card.style.setProperty('--x', `${x}px`);
+        card.style.setProperty('--y', `${y}px`);
+      });
+    });
+  </script>
+</body>
+</html>
